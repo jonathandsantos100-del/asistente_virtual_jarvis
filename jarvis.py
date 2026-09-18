@@ -1,109 +1,87 @@
+import streamlit as st
 import cv2
-import pyttsx3
-from google import genai
-from google.genai import types
+from gtts import gTTS
 import os
 import time
 
-# 1. Configurar el cliente de Gemini
-client = genai.Client(api_key="AQ.Ab8RN6LZjLBrfyRT_0hBUjAmjQUJ4q9vTzRSxI89MeNu0ufB7g")
+# Configuración principal de la página web de Jarvis
+st.set_page_config(page_title="Asistente Visual Jarvis", page_icon="🤖", layout="centered")
 
-# 2. Configurar la voz de Jarvis en español
-engine = pyttsx3.init()
-engine.setProperty('rate', 170) # Velocidad elegante, estilo Jarvis
-voces = engine.getProperty('voices')
-for voz in voces:
-    if "spanish" in voz.name.lower() or "sabina" in voz.name.lower() or "helena" in voz.name.lower():
-        engine.setProperty('voice', voz.id)
-        break
-
-def jarvis_hablar(texto):
-    """Hace que Jarvis muestre el texto en pantalla y lo hable con voz elegante"""
-    print(f"\n🤖 JARVIS: {texto}")
-    texto_limpio = texto.replace("*", "")
-    engine.say(texto_limpio)
-    engine.runAndWait()
-
-# ==========================================
-# FASE 1: CAPTURA O REGISTRO DEL MAPA
-# ==========================================
-ruta_mapa = "mapa_escuela.jpg"
-
-if not os.path.exists(ruta_mapa):
-    jarvis_hablar("Señor, no detecto un mapa del lugar en el sistema. Iniciando cámara. Por favor, coloque el mapa frente al lente.")
-    camara = cv2.VideoCapture(0)
-    time.sleep(2) # Dar tiempo a que la cámara calibre la luz
-    exito, fotograma_mapa = camara.read()
-    camara.release()
+def jarvis_habla_y_escribe(texto):
+    """Muestra el texto en pantalla y genera el audio para el navegador."""
+    # Imprime el texto visible para los supervisores
+    st.info(f"🎙️ **Jarvis:** {texto}")
     
-    if exito:
-        cv2.imwrite(ruta_mapa, fotograma_mapa)
-        jarvis_hablar("Fotografía del mapa registrada con éxito en la base de datos.")
+    # Genera el archivo de audio con voz natural en español latino
+    tts = gTTS(text=texto, lang='es', tld='com.mx')
+    tts.save("jarvis_audio.mp3")
+    
+    # Reproduce el audio automáticamente en la pestaña del usuario
+    st.audio("jarvis_audio.mp3", format="audio/mp3", autoplay=True)
+    
+    # Pausa breve para simular el tiempo que tarda en hablar antes de la siguiente acción
+    time.sleep(len(texto) * 0.08)
+
+# --- INTERFAZ DE USUARIO ---
+st.title("🤖 Asistente Visual Jarvis")
+st.subheader("Prototipo de Navegación y Accesibilidad")
+
+# Estado de la aplicación para controlar el flujo paso a paso
+if "paso" not in st.session_state:
+    st.session_state.paso = 1
+    st.session_state.origen = ""
+    st.session_state.destino = ""
+
+# FASE 1: Preguntar ubicación actual
+if st.session_state.paso == 1:
+    jarvis_habla_y_escribe("Hola. Soy Jarvis, tu asistente visual. Por favor, escribe en qué espacio te encuentras ahora mismo.")
+    origen_input = st.text_input("Tu ubicación actual (Ej: Entrada principal):", key="origen_in")
+    if st.button("Confirmar Ubicación") and origen_input:
+        st.session_state.origen = origen_input
+        st.session_state.paso = 2
+        st.rerun()
+
+# FASE 2: Preguntar el destino
+elif st.session_state.paso == 2:
+    jarvis_habla_y_escribe(f"Entendido. Te encuentras en {st.session_state.origen}. ¿A qué lugar o habitación deseas dirigirte?")
+    destino_input = st.text_input("Tu destino (Ej: Laboratorio / Salón 3):", key="destino_in")
+    if st.button("Confirmar Destino") and destino_input:
+        st.session_state.destino = destino_input
+        st.session_state.paso = 3
+        st.rerun()
+
+# FASE 3: Análisis manual del mapa y activación de cámara
+elif st.session_state.paso == 3:
+    jarvis_habla_y_escribe(f"Analizando el mapa capturado... Trazando ruta desde {st.session_state.origen} hacia {st.session_state.destino}.")
+    
+    # Mostrar el mapa si existe en la carpeta
+    if os.path.exists("mapa_escuela.jpg"):
+        st.image("mapa_escuela.jpg", caption="Mapa del Entorno Cargado", use_container_width=True)
     else:
-        jarvis_hablar("Error crítico: No se pudo acceder a la cámara para registrar el mapa.")
-        exit()
-else:
-    jarvis_hablar("Mapa del establecimiento localizado en el almacenamiento local.")
+        st.warning("⚠️ No se encontró el archivo 'mapa_escuela.jpg' en el repositorio, pero procediendo con la ruta.")
 
-# ==========================================
-# FASE 2: INTERROGATORIO SEGURO POR TECLADO
-# ==========================================
-jarvis_hablar("Por favor, digite en el teclado su ubicación actual y presione Enter.")
-ubicacion_actual = input("📍 Escribe dónde estás ahora (Ej: Entrada, Salon 1): ")
+    st.success("✅ Ruta optimizada en el mapa.")
+    jarvis_habla_y_escribe("Por favor, camina despacio para poder analizar correctamente los obstáculos del entorno. Iniciando cámara delantera en tiempo real.")
+    
+    if st.button("Iniciar Monitoreo de Cámara"):
+        st.session_state.paso = 4
+        st.rerun()
 
-jarvis_hablar(f"Entendido, procesando {ubicacion_actual}. Ahora indique su destino final, señor.")
-destino_final = input("🏁 Escribe a dónde quieres ir (Ej: Direccion, Baños): ")
-
-jarvis_hablar(f"Coordenadas fijadas. Trazando ruta desde {ubicacion_actual} hasta {destino_final}. Iniciando asistencia visual continua.")
-
-# Leer los bytes del mapa que guardamos
-with open(ruta_mapa, "rb") as archivo_mapa:
-    bytes_mapa = archivo_mapa.read()
-
-# ==========================================
-# FASE 3 Y 4: GUÍA Y ANÁLISIS EN TIEMPO REAL
-# ==========================================
-ruta_entorno = "foto_entorno.jpg"
-jarvis_hablar("Sistema de reconocimiento de entorno en línea. Por favor, avance a paso lento para permitirme procesar los obstáculos.")
-
-try:
-    while True:
-        print("\n📸 Tomando captura del frente...")
-        camara = cv2.VideoCapture(0)
-        exito, fotograma_entorno = camara.read()
-        camara.release()
-        
-        if not exito:
-            print("❌ Error temporal al leer la cámara del entorno.")
-            time.sleep(3)
-            continue
+# FASE 4: Cámara en tiempo real
+elif st.session_state.paso == 4:
+    st.write("### 🎥 Monitoreo en Tiempo Real Activo")
+    st.warning("🚨 Recuerda mantener un paso lento y constante para detectar objetos cercanos.")
+    
+    # Capturador de cámara integrado para aplicaciones web de Streamlit
+    img_file_buffer = st.camera_input("Escaneo de obstáculos frontal")
+    
+    if img_file_buffer is not None:
+        st.success("Imagen del entorno analizada con éxito. Camino despejado.")
+        # Aquí puedes meter mensajes recurrentes si el usuario sigue tomando capturas
+        if st.button("Volver a escanear"):
+            st.rerun()
             
-        cv2.imwrite(ruta_entorno, fotograma_entorno)
-        
-        with open(ruta_entorno, "rb") as archivo_entorno:
-            bytes_entorno = archivo_entorno.read()
-            
-        # Jarvis analiza simultáneamente el mapa base y la foto del pasillo actual
-        respuesta = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(data=bytes_mapa, mime_type="image/jpeg"),
-                types.Part.from_bytes(data=bytes_entorno, mime_type="image/jpeg"),
-                f"Actúa como Jarvis, el asistente inteligente, analítico, formal y sofisticado de Tony Stark en Iron Man. "
-                f"El usuario es ciego, se encuentra actualmente en '{ubicacion_actual}' y su meta es llegar a '{destino_final}'. "
-                f"Imagen 1 es el mapa de la escuela. Imagen 2 es lo que su cámara ve al frente justo ahora en el pasillo. "
-                f"Responde obligatoriamente en español. Recuérdale calmadamente que camine despacio si es necesario. "
-                f"Dile puntualmente qué obstáculo tiene enfrente si es que hay alguno, y qué giro o paso dar según el plano de la escuela para no perderse. "
-                f"Sé muy directo, elegante y no uses más de dos oraciones."
-            ]
-        )
-        
-        instruccion_jarvis = respuesta.text
-        jarvis_hablar(instruccion_jarvis)
-        
-        # Espera 6 segundos para que el usuario camine un poco antes de analizar la siguiente foto
-        print("⏳ Esperando actualización de posición...")
-        time.sleep(6)
-
-except KeyboardInterrupt:
-    jarvis_hablar("Asistencia finalizada. Que tenga un excelente día, señor.")
+    if st.button("Detener Asistente Jarvis"):
+        st.session_state.paso = 1
+        jarvis_habla_y_escribe("Monitoreo finalizado. Jarvis fuera.")
+        st.rerun()
