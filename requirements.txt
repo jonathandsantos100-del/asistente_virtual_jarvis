@@ -1,3 +1,5 @@
 streamlit
+opencv-python-headless
+pyttsx3
 google-genai
-gTTS
+Pillow
