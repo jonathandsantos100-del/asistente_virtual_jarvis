@@ -1,5 +1,5 @@
 streamlit
 opencv-python-headless
+google-generativeai
 edge-tts
-Pillow
 streamlit-mic-recorder

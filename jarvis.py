@@ -4,21 +4,21 @@ import edge_tts
 import os
 import time
 from streamlit_mic_recorder import speech_to_text
-from google import genai
+import google.generativeai as genai
 from PIL import Image
 
-# Configuración de la interfaz de Jarvis
+# Configuración de la interfaz web de Jarvis
 st.set_page_config(page_title="Asistente Visual Jarvis", page_icon="🤖", layout="centered")
 
-VOICE = "es-MX-JorgeNeural"  # Voz neuronal masculina de Jarvis
+VOICE = "es-MX-JorgeNeural"  # Voz neuronal masculina ideal de Jarvis
 AUDIO_FILE = "jarvis_voice.mp3"
 
 # Inicializar tu clave de Gemini de forma segura
 if "GEMINI_API_KEY" not in st.session_state:
-    st.session_state.GEMINI_API_KEY = "AQ" # Vinculado automáticamente con tu clave
+    st.session_state.GEMINI_API_KEY = "AQ" # Vinculado con tu clave
 
 def jarvis_habla_y_escribe(texto):
-    """Genera la voz de Jarvis y muestra el texto en pantalla."""
+    """Genera la voz de Jarvis y muestra el texto en pantalla para los supervisores."""
     st.info(f"🤖 **Jarvis:** {texto}")
     
     async def generate_audio():
@@ -32,14 +32,14 @@ def jarvis_habla_y_escribe(texto):
 st.title("🤖 Asistente Visual Jarvis")
 st.subheader("Sistema Inteligente de Navegación por Voz e IA")
 
-# Control de fases y memoria de ruta
+# Control de fases y memoria del trayecto
 if "fase" not in st.session_state:
     st.session_state.fase = "bienvenida"
     st.session_state.origen = ""
     st.session_state.destino = ""
-    st.session_state.intentos_camara = 0  # Historial de pasos
+    st.session_state.intentos_camara = 0  # Contador de pasos para el desvío
 
-# --- FLUJO 100% INTEGRADO Y AUTOMATIZADO ---
+# --- FLUJO 100% AUTOMATIZADO ---
 
 # FASE 0: ADVERTENCIA DE AUDÍFONOS
 if st.session_state.fase == "bienvenida":
@@ -49,7 +49,7 @@ if st.session_state.fase == "bienvenida":
         st.session_state.fase = "captura_mapa"
         st.rerun()
 
-# FASE 1: SACAR FOTO AL MAPA
+# FASE 1: SACAR FOTO AL MAPA (Cámara Directa)
 elif st.session_state.fase == "captura_mapa":
     jarvis_habla_y_escribe("Por favor, captura la fotografía del mapa del entorno para iniciar la navegación guiada.")
     
@@ -92,7 +92,7 @@ elif st.session_state.fase == "preguntar_destino":
         st.session_state.fase = "camara_activa"
         st.rerun()
 
-# FASE 4: CÁMARA CON DOBLE FUNCIÓN (GPS + OBSTÁCULOS) Y MODO HUMORÍSTICO
+# FASE 4: CÁMARA CON DOBLE FUNCIÓN (GPS + EVITA OBSTÁCULOS) Y MODO HUMORÍSTICO
 elif st.session_state.fase == "camara_activa":
     st.write("### 🎥 Escaneo Inteligente Activo")
     st.warning("🚨 Camine despacio. Analizando ruta y terreno en tiempo real.")
@@ -101,19 +101,20 @@ elif st.session_state.fase == "camara_activa":
     if mapa_existe:
         st.image("mapa_escuela.jpg", caption=f"Mapa: {st.session_state.origen} -> {st.session_state.destino}", width=200)
     
-    # Captura la imagen del entorno real del teléfono
+    # Activa la cámara del teléfono para escanear el suelo
     foto_entorno = st.camera_input("Enfoque frontal del camino", key="camara_obstaculos")
     
     if foto_entorno is not None:
         imagen_camara = Image.open(foto_entorno)
         st.info("🧠 Jarvis procesando datos de navegación...")
-        st.session_state.intentos_camara += 1  # Contador de pasos para el desvío
+        st.session_state.intentos_camara += 1  # Suma un paso para ver si se pasó de la ruta
         
         try:
-            client = genai.Client(api_key=st.session_state.GEMINI_API_KEY)
-            lista_archivos = [imagen_camara]
+            # Configuración corregida de la Inteligencia Artificial compatible
+            genai.configure(api_key=st.session_state.GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-1.5-flash")
             
-            # Simulamos si el usuario ya tomó muchas fotos seguidas (se desvió o se pasó)
+            lista_archivos = [imagen_camara]
             se_paso_de_ruta = st.session_state.intentos_camara >= 4
             
             instrucciones_ia = (
@@ -122,17 +123,17 @@ elif st.session_state.fase == "camara_activa":
             )
             
             if se_paso_de_ruta:
-                # Regaño humorístico mexicano
+                # Regaño humorístico si simula desviarse
                 instrucciones_ia += (
                     "¡ATENCIÓN! El usuario se ha desviado por completo de la ruta. "
                     "Empieza tu respuesta diciendo obligatoriamente con tono divertido y mexicano: 'No seas wey, regrésate, te pasaste de la ruta.' "
                     "E indica brevemente que vas a recalcular el camino."
                 )
             else:
-                # La Doble Función solicitada
+                # Doble Función Combinada
                 instrucciones_ia += (
-                    "Debes hacer una doble función combinada:\n"
-                    "1. FUNCIÓN GPS: Indica cuántos pasos dar y hacia dónde girar basándote en la ruta (Ej: 'Avanza 4 pasos y gira a la derecha').\n"
+                    "Debes hacer una doble función combinada obligatoria:\n"
+                    "1. FUNCIÓN GPS: Indica cuántos pasos dar y hacia dónde girar basándote en la ruta del mapa (Ej: 'Avanza 4 pasos y gira a la derecha').\n"
                     "2. FUNCIÓN OBSTÁCULOS: Si en la foto del suelo ves algún peligro (como una escoba, mochila, silla, cable o persona) "
                     "añade una orden física inmediata al final (Ej: '¡Cuidado, escoba en el suelo, da un paso a la izquierda!' o '¡Agáchate, objeto alto!').\n"
                     "Si el camino está limpio, solo da la instrucción del GPS."
@@ -143,20 +144,20 @@ elif st.session_state.fase == "camara_activa":
                 lista_archivos.append(imagen_mapa)
                 instrucciones_ia += " Utiliza la imagen del mapa escolar adjunto para guiar con lógica el camino del GPS."
 
-            respuesta_ia = client.models.generate_content(
-                model="gemini-2.5-flash",
+            # Llamada al modelo de IA
+            respuesta_ia = model.generate_content(
                 contents=lista_archivos + [instrucciones_ia]
             )
             
-            # Jarvis habla con la respuesta combinada de la IA
+            # Jarvis lee el resultado en tu teléfono
             jarvis_habla_y_escribe(respuesta_ia.text)
             
-            # Limpiar el contador si ya se le avisó que se pasó
+            # Limpiar contador si ya se le dio el aviso
             if se_paso_de_ruta:
                 st.session_state.intentos_camara = 0
             
         except Exception as e:
-            st.error("Error en el módulo analítico de Jarvis.")
+            st.error(f"Error en el módulo analítico de Jarvis: {e}")
             jarvis_habla_y_escribe("Aviso. Dificultad para conectar con el satélite de análisis. Mantenga la precaución.")
             
         if st.button("Siguiente paso / Volver a escanear"):
